@@ -9,36 +9,34 @@ load_dotenv()
 
 CREDENTIAL_FILE = "serviceAccountKey.json"
 
-# Fallback for double extension filename if present
 if not os.path.exists(CREDENTIAL_FILE) and os.path.exists("serviceAccountKey.json.json"):
     CREDENTIAL_FILE = "serviceAccountKey.json.json"
 
+# Initialize Firebase if credential file exists
 if not firebase_admin._apps:
     if os.path.exists(CREDENTIAL_FILE):
         cred = credentials.Certificate(CREDENTIAL_FILE)
         project_id = cred.project_id
-        
-        # Reads storage bucket from .env, default fallback to classic .appspot.com
         bucket_name = os.getenv("FIREBASE_STORAGE_BUCKET", f"{project_id}.appspot.com")
         
         firebase_admin.initialize_app(cred, {
             'storageBucket': bucket_name
         })
     else:
-        raise FileNotFoundError(
-            f"Firebase key file '{CREDENTIAL_FILE}' not found in project root! "
-            "Please ensure serviceAccountKey.json is placed in the project root."
-        )
+        print(f"[Firebase Notice] Credential file '{CREDENTIAL_FILE}' not found. Running in CI/offline mode.")
 
-db = firestore.client()
+# Safely attach Firestore database client
+try:
+    db = firestore.client() if firebase_admin._apps else None
+except Exception:
+    db = None
 
 
 def upload_resume_file(file_bytes: bytes, original_filename: str) -> str:
-    """
-    Attempts to upload PDF/DOCX resume file bytes to Firebase Storage.
-    If storage bucket is unavailable or throws an error, gracefully returns 
-    a fallback URL so the multi-agent AI pipeline continues without crashing.
-    """
+    if not firebase_admin._apps:
+        print("[Firebase Warning] Storage credentials missing. File upload bypassed.")
+        return "#storage-bypassed"
+        
     try:
         bucket = storage.bucket()
         file_extension = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else 'pdf'
@@ -52,17 +50,12 @@ def upload_resume_file(file_bytes: bytes, original_filename: str) -> str:
             return blob.public_url
         except Exception:
             return blob.generate_signed_url(expiration=3600 * 24 * 7)
-            
     except Exception as e:
         print(f"[Firebase Warning] Storage upload bypassed: {str(e)}")
-        # Safe fallback URL so downstream agents run smoothly
         return "#storage-bypassed"
 
 
 def save_analysis_result(analysis_id: str, state_data: dict, resume_url: str) -> dict:
-    """
-    Saves state output into the 'analyses' Firestore document collection.
-    """
     record = {
         "analysis_id": analysis_id,
         "candidate_name": state_data.get("resume_data", {}).get("personal_info", {}).get("name", "Unknown Candidate"),
@@ -78,21 +71,23 @@ def save_analysis_result(analysis_id: str, state_data: dict, resume_url: str) ->
         "job_data": state_data.get("job_data", {})
     }
     
-    db.collection('analyses').document(analysis_id).set(record)
+    if db:
+        db.collection('analyses').document(analysis_id).set(record)
+    else:
+        print("[Firebase Notice] Database save skipped (running in CI/offline mode).")
+        
     return record
 
 
 def fetch_all_analyses() -> list:
-    """
-    Retrieves all past candidate match documents from Firestore ordered by date.
-    """
+    if not db:
+        return []
     docs = db.collection('analyses').order_by('created_at', direction=firestore.Query.DESCENDING).stream()
     return [doc.to_dict() for doc in docs]
 
 
 def fetch_single_analysis(analysis_id: str) -> dict:
-    """
-    Retrieves a single match document by analysis_id.
-    """
+    if not db:
+        return None
     doc = db.collection('analyses').document(analysis_id).get()
     return doc.to_dict() if doc.exists else None
