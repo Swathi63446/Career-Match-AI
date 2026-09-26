@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Report - {{ data.candidate_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="container header-container">
+            <h1>CareerMatch <span>AI</span></h1>
+            <a href="/dashboard" class="btn btn-outline">&larr; Back to Dashboard</a>
+        </div>
+    </header>
+
+    <main class="container main-content">
+        <!-- Summary Header Card -->
+        <section class="card report-header-card">
+            <div class="candidate-meta">
+                <div>
+                    <h2>{{ data.candidate_name }}</h2>
+                    <p class="role-title">Target Role: <span>{{ data.job_title }}</span></p>
+                </div>
+                <div>
+                    <a href="{{ data.resume_url }}" target="_blank" class="btn btn-secondary">Download Resume File</a>
+                </div>
+            </div>
+            
+            <hr class="divider">
+
+            <div class="summary-box">
+                <h3>Executive Summary</h3>
+                <p>{{ data.match_summary }}</p>
+            </div>
+        </section>
+
+        <!-- Skills Analysis Table -->
+        <section class="card">
+            <h3>Detailed Requirement Match Analysis</h3>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Requirement</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Evidence from Resume</th>
+                            <th>ChromaDB RAG Context</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for match in data.matches %}
+                        <tr>
+                            <td><strong>{{ match.requirement }}</strong></td>
+                            <td>{{ match.category }}</td>
+                            <td>
+                                <span class="badge badge-{{ 'strong' if match.status == 'Strong Match' else ('partial' if match.status == 'Partial Match' else ('weak' if match.status == 'Weak Evidence' else 'missing')) }}">
+                                    {{ match.status }}
+                                </span>
+                            </td>
+                            <td>{{ match.evidence_from_resume }}</td>
+                            <td class="rag-text">{{ match.rag_context_used if match.rag_context_used else 'N/A' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Skill Gaps Section -->
+        <section class="card">
+            <h3>Identified Skill Gaps & Prioritization</h3>
+            {% if data.skill_gaps %}
+                <div class="gap-grid">
+                    {% for gap in data.skill_gaps %}
+                    <div class="gap-card priority-{{ gap.priority | lower | replace(' ', '-') }}">
+                        <div class="gap-header">
+                            <h4>{{ gap.skill }}</h4>
+                            <span class="badge badge-priority">{{ gap.priority }}</span>
+                        </div>
+                        <p><strong>Reason:</strong> {{ gap.reason }}</p>
+                        <p class="recommendation-text"><strong>Action:</strong> {{ gap.recommendation }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="empty-state">No significant skill gaps identified for this candidate!</p>
+            {% endif %}
+        </section>
+
+        <!-- Strategic Recommendations -->
+        <section class="card">
+            <h3>Strategic Recommendations</h3>
+            <ul class="recommendation-list">
+                {% for rec in data.recommendations %}
+                    <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,164 @@
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --bg: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    
+    --success: #16a34a;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --info: #0284c7;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.app-header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-header h1 {
+    font-size: 1.5rem;
+    color: var(--text-main);
+}
+
+.app-header h1 span {
+    color: var(--primary);
+}
+
+.tagline {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.main-content {
+    margin-top: 30px;
+    margin-bottom: 50px;
+}
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.card h2, .card h3 {
+    margin-bottom: 16px;
+    font-size: 1.25rem;
+}
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+}
+
+input[type="file"], textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
+textarea {
+    resize: vertical;
+}
+
+.btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    font-size: 0.95rem;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+
+.btn-secondary { background: #e2e8f0; color: var(--text-main); }
+.btn-secondary:hover { background: #cbd5e1; }
+
+.btn-outline { border: 1px solid var(--border); color: var(--text-main); }
+
+.btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+
+.hidden { display: none; }
+
+/* Table Styles */
+.table-wrapper { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; text-align: left; }
+.data-table th, .data-table td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.data-table th { background: #f1f5f9; font-weight: 600; }
+
+/* Status Badges */
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-strong { background: #dcfce7; color: var(--success); }
+.badge-partial { background: #fef3c7; color: var(--warning); }
+.badge-weak { background: #e0f2fe; color: var(--info); }
+.badge-missing { background: #fee2e2; color: var(--danger); }
+
+/* Progress Card */
+.progress-card { background: #eff6ff; border-color: #bfdbfe; }
+.step-list { margin-top: 16px; }
+.step-item { padding: 8px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 10px; }
+.step-item.active { font-weight: bold; color: var(--primary); }
+.step-item.completed { color: var(--success); }
+
+/* Gap Analysis Cards */
+.gap-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.gap-card { padding: 16px; border-radius: 6px; border-left: 4px solid var(--border); background: #f8fafc; }
+.priority-high-priority { border-left-color: var(--danger); background: #fff5f5; }
+.priority-medium-priority { border-left-color: var(--warning); background: #fffbeb; }
+.priority-low-priority { border-left-color: var(--info); background: #f0f9ff; }
+
+.gap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.divider { border: 0; height: 1px; background: var(--border); margin: 16px 0; }
+.rag-text { font-size: 0.8rem; color: var(--text-muted); }
+.recommendation-list { padding-left: 20px; }
+.recommendation-list li { margin-bottom: 8px; }
