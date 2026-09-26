@@ -27,7 +27,7 @@ jobs:
 
       - name: Verify Flask App Import & Syntax
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'ci_dummy_gemini_key' }}
+          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY || 'ci_dummy_flask_secret' }}
         run: |
           uv run python -c "import app; print('App syntax and module dependencies verified successfully!')"
