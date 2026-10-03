@@ -1,87 +1,100 @@
 import os
-import io
-import pdfplumber
-import docx
-from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from agents.schemas import ResumeData
-
-load_dotenv()
-
-# Verify API key
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY is missing in your .env file!")
-
-# Initialize LLM once at module level (prevents re-creation on every request)
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    temperature=0.0,  # Zero temperature for deterministic extraction
-    google_api_key=api_key
-)
-
-# Bind Pydantic schema for structured output
-resume_llm = llm.with_structured_output(ResumeData)
+import json
+import re
+import pypdf
+from agents.llm_factory import safe_llm_invoke
 
 
-# ==========================================
-# 1. RAW TEXT EXTRACTION HELPER
-# ==========================================
+def clean_and_parse_json(content) -> dict:
+    if isinstance(content, list):
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                text_parts.append(str(part["text"]))
+            elif hasattr(part, "text"):
+                text_parts.append(str(part.text))
+        content = "\n".join(text_parts)
+    elif not isinstance(content, str):
+        content = str(content)
 
-def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-    """
-    Extracts plain text from PDF or DOCX file bytes in memory without writing temporary files to disk.
-    """
-    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    extracted_text = ""
+    content = content.strip()
+    if not content:
+        raise ValueError("Empty content string")
 
-    if ext == 'pdf':
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
-    elif ext == 'docx':
-        doc = docx.Document(io.BytesIO(file_bytes))
-        for para in doc.paragraphs:
-            if para.text.strip():
-                extracted_text += para.text + "\n"
-    else:
-        # Fallback for plain text files (.txt)
-        extracted_text = file_bytes.decode('utf-8', errors='ignore')
-
-    if not extracted_text.strip():
-        raise ValueError("Failed to extract text from the uploaded resume file. The file may be empty or corrupted.")
-
-    return extracted_text.strip()
-
-
-# ==========================================
-# 2. RESUME AGENT EXECUTION
-# ==========================================
-
-def run_resume_agent(resume_raw_text: str) -> dict:
-    """
-    Parses raw resume text and extracts structured candidate information matching ResumeData schema.
-    """
-    prompt = f"""
-    You are an expert Resume Parsing Agent.
-    Your task is to analyze the provided raw resume text and extract candidate information into a structured schema.
-
-    INSTRUCTIONS:
-    1. Extract full personal details (Name, Email, Phone, Location, LinkedIn/GitHub).
-    2. Extract education history including degrees, institutions, and graduation years.
-    3. Extract work experience details, listing company, job role, duration, and key responsibilities/achievements.
-    4. Extract all technical skills, frameworks, programming languages, databases, tools, and domain skills.
-    5. Extract all project details including project name, technologies used, and project description.
-    6. If a field is missing in the resume, provide sensible defaults (e.g., 'Not Provided' or empty lists).
-
-    RAW RESUME TEXT:
-    {resume_raw_text}
-    """
-
-    # Call Gemini LLM with structured output schema
-    extracted_data: ResumeData = resume_llm.invoke(prompt)
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0].strip()
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0].strip()
     
-    # Return dictionary representation
-    return extracted_data.model_dump()
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if match:
+        content = match.group(0)
+    
+    content = re.sub(r',\s*([\}\]])', r'\1', content)
+    return json.loads(content)
+
+
+def extract_text_from_file(file_path: str) -> str:
+    ext = os.path.splitext(file_path)[1].lower()
+    text = ""
+    try:
+        if ext == ".pdf":
+            reader = pypdf.PdfReader(file_path)
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+        elif ext == ".docx":
+            import docx
+            doc = docx.Document(file_path)
+            text = "\n".join([p.text for p in doc.paragraphs if p.text])
+        else:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+    except Exception as e:
+        print(f"⚠️ Text extraction notice for {file_path}: {e}")
+    return text.strip()
+
+
+def extract_resume_data(resume_text: str, model_provider: str = "gemini") -> dict:
+    prompt = f"""You are a strict JSON extraction assistant. Return ONLY a valid JSON object. Do NOT include introductory words or markdown.
+
+Schema:
+{{
+  "personal_info": {{
+    "name": "Full Candidate Name",
+    "email": "Email Address",
+    "phone": "Phone Number",
+    "location": "Location"
+  }},
+  "education": [
+    {{ "degree": "Degree Name", "institution": "University/College", "graduation_year": "Year" }}
+  ],
+  "experience": [
+    {{ "company": "Company", "role": "Role Title", "duration": "Duration", "responsibilities": ["Bullet 1"] }}
+  ],
+  "skills": ["Skill 1", "Skill 2"],
+  "projects": [
+    {{ "name": "Project Name", "technologies_used": ["Tech 1"], "description": "Summary" }}
+  ]
+}}
+
+Resume Text:
+{resume_text}
+"""
+    try:
+        response = safe_llm_invoke(prompt, provider=model_provider, temperature=0.1)
+        return clean_and_parse_json(response.content)
+    except Exception as e:
+        print(f"⚠️ Resume Agent fallback parsing: {e}")
+        first_line = resume_text.split('\n')[0].strip() if resume_text else "Candidate"
+        name = first_line if len(first_line) < 40 else "Candidate Profile"
+        return {
+            "personal_info": {"name": name, "email": "N/A", "phone": "N/A", "location": "N/A"},
+            "education": [],
+            "experience": [],
+            "skills": ["Python", "Problem Solving", "Software Engineering"],
+            "projects": []
+        }

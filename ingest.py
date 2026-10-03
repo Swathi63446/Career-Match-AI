@@ -1,25 +1,12 @@
 import os
-from dotenv import load_dotenv
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import Chroma
+import shutil
+from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain_chroma import Chroma
 from langchain_core.documents import Document
-
-load_dotenv()
-
-# Verify Gemini API key presence
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY is missing in your .env file!")
-
-# Initialize Google Gemini Embeddings API per PDF requirement
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/text-embedding-004",
-    google_api_key=api_key
-)
 
 PERSIST_DIRECTORY = "./vectorstore"
 
-# Comprehensive Knowledge Base matching Section 8 requirements
+# Comprehensive Skill & Framework Knowledge Base
 SKILL_DOCUMENTS = [
     {
         "skill": "Python",
@@ -112,7 +99,7 @@ SKILL_DOCUMENTS = [
     {
         "skill": "LangChain",
         "category": "AI Frameworks",
-        "description": "A open-source software framework engineered to simplify the creation of applications using large language models (LLMs), agents, prompt chains, and vector retrievers.",
+        "description": "An open-source software framework engineered to simplify the creation of applications using large language models (LLMs), agents, prompt chains, and vector retrievers.",
         "related": "Gemini API, RAG, ChromaDB, Python, Multi-Agent Systems, Prompt Engineering",
         "use_cases": "Building multi-agent decision workflows, orchestrating Retrieval-Augmented Generation systems, parsing structured LLM responses.",
         "job_requirements": "Requires deep understanding of chain abstractions, output parsing schemas, vector store retrievers, agent memory, and prompt templates."
@@ -143,10 +130,20 @@ SKILL_DOCUMENTS = [
     }
 ]
 
+
 def run_ingestion():
+    # 1. Clean old vector database to avoid dimension mismatch
+    if os.path.exists(PERSIST_DIRECTORY):
+        print(f"[Ingest] Removing old vectorstore at '{PERSIST_DIRECTORY}'...")
+        shutil.rmtree(PERSIST_DIRECTORY)
+
+    # 2. Initialize FastEmbed ONNX embedding model (~120MB RAM, PyTorch-free)
+    print("[Ingest] Initializing FastEmbed model 'sentence-transformers/all-MiniLM-L6-v2'...")
+    embeddings = FastEmbedEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
     documents = []
-    
-    # Format each record into a LangChain Document with rich page_content and metadata
+
+    # 3. Format each record into a LangChain Document with metadata
     for item in SKILL_DOCUMENTS:
         formatted_content = (
             f"Technology Skill: {item['skill']}\n"
@@ -156,7 +153,7 @@ def run_ingestion():
             f"Common Use Cases: {item['use_cases']}\n"
             f"Typical Requirements: {item['job_requirements']}"
         )
-        
+
         doc = Document(
             page_content=formatted_content,
             metadata={
@@ -167,16 +164,17 @@ def run_ingestion():
         )
         documents.append(doc)
 
-    print(f"Creating persistent ChromaDB knowledge base at '{PERSIST_DIRECTORY}'...")
-    
-    # Ingest documents into ChromaDB using Gemini text-embedding-004
+    print(f"[Ingest] Creating persistent ChromaDB database at '{PERSIST_DIRECTORY}'...")
+
+    # 4. Ingest documents into ChromaDB
     Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
         persist_directory=PERSIST_DIRECTORY
     )
-    
-    print(f"Ingestion Complete! Successfully embedded {len(documents)} skill documents into ChromaDB.")
+
+    print(f"[Ingest] Complete! Successfully embedded {len(documents)} skill documents using FastEmbed.")
+
 
 if __name__ == "__main__":
     run_ingestion()

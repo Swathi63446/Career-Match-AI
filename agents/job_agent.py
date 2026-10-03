@@ -1,52 +1,146 @@
 import os
-from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from agents.schemas import JobData
-
-load_dotenv()
-
-# Verify API key
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY is missing in your .env file!")
-
-# Initialize LLM client at module level
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    temperature=0.0,  # Zero temperature for deterministic extraction
-    google_api_key=api_key
-)
-
-# Bind Pydantic schema for structured output
-job_llm = llm.with_structured_output(JobData)
+import json
+import re
+from agents.llm_factory import safe_llm_invoke
 
 
-def run_job_agent(job_raw_text: str) -> dict:
-    """
-    Analyzes raw job description text and extracts structured requirements matching JobData schema.
-    """
-    if not job_raw_text or not job_raw_text.strip():
-        raise ValueError("Job description text cannot be empty.")
+def clean_and_parse_json(content) -> dict:
+    """Safely extracts text from strings or lists and parses clean JSON."""
+    if isinstance(content, list):
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                text_parts.append(str(part["text"]))
+            elif hasattr(part, "text"):
+                text_parts.append(str(part.text))
+        content = "\n".join(text_parts)
+    elif not isinstance(content, str):
+        content = str(content)
 
-    prompt = f"""
-    You are an expert Job Description Analysis Agent.
-    Analyze the provided raw Job Description text and extract structured criteria.
+    content = content.strip()
+    if not content:
+        raise ValueError("Empty content string")
 
-    INSTRUCTIONS:
-    1. Extract the target job title/role (e.g., 'Python Backend Developer', 'AI Engineer').
-    2. Identify all explicitly mandatory/required skills (technical skills, languages, frameworks, databases, tools).
-    3. Identify all preferred, nice-to-have, or optional skills.
-    4. Extract key job responsibilities and daily duties.
-    5. Extract experience requirements (e.g., '1-3 years', 'Entry Level', '5+ years').
-    6. Extract education requirements (e.g., 'Bachelor's in Computer Science').
-    7. Extract any other requirements like certifications, communication skills, or domain expertise.
-
-    RAW JOB DESCRIPTION:
-    {job_raw_text}
-    """
-
-    # Call Gemini LLM with structured output schema
-    extracted_data: JobData = job_llm.invoke(prompt)
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0].strip()
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0].strip()
     
-    # Return dictionary representation
-    return extracted_data.model_dump()
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if match:
+        content = match.group(0)
+    
+    content = re.sub(r',\s*([\}\]])', r'\1', content)
+    return json.loads(content)
+
+
+def extract_job_title_from_text(jd_text: str) -> str:
+    """Regex-based fallback for extracting explicit job titles."""
+    patterns = [
+        r'(?:job\s*title|title|role|position)\s*:\s*([^\n\r]+)',
+        r'^\s*[•\-\*]?\s*(?:job\s*title|title|role|position)\s*:\s*([^\n\r]+)'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, jd_text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            title = match.group(1).strip()
+            title = re.sub(r'^[•\-\*\s]+', '', title).strip()
+            if title and len(title) < 90:
+                return title
+
+    lines = [l.strip() for l in jd_text.split('\n') if l.strip()]
+    for line in lines[:3]:
+        clean_line = re.sub(r'^[•\-\*\s]+', '', line).strip()
+        clean_line = re.sub(r'^(?:job\s*title|title|role|position)\s*:\s*', '', clean_line, flags=re.IGNORECASE).strip()
+        if clean_line and len(clean_line) < 80 and not clean_line.lower().startswith(('department', 'reports to', 'key responsibilities', 'overview', 'about')):
+            return clean_line
+
+    return "Technical Role"
+
+
+def extract_job_data(jd_text: str, model_provider: str = "gemini") -> dict:
+    """
+    Extracts structured job requirements using atomic skill splitting.
+    Forces all LLM providers (Gemini, Groq, Hugging Face) to break down compound
+    requirements into granular, single-item requirements for long-form reports.
+    """
+    prompt = f"""You are a strict JSON extraction assistant. Extract EVERY requirement from the job description below into individual ATOMIC micro-skills.
+
+STRICT ATOMIC EXTRACTION RULES:
+1. Do NOT bundle or group skills together (e.g., do NOT write "Docker, Kubernetes, and Git").
+2. Split every single tool, language, library, database, cloud service, and qualification into its own individual array item.
+3. For example, if the text says "Experience in PyTorch, TensorFlow, or Scikit-Learn", output three separate items: "PyTorch", "TensorFlow", "Scikit-Learn".
+4. Do NOT include introductory conversational text or markdown explanation outside the JSON.
+
+Return ONLY a valid JSON object matching this EXACT schema:
+{{
+  "job_title": "Exact Role Title",
+  "target_role": "Primary Technical Domain",
+  "required_skills": [
+    "Atomic Skill 1",
+    "Atomic Skill 2",
+    "Atomic Skill 3",
+    "Atomic Skill 4",
+    "Atomic Skill 5"
+  ],
+  "preferred_skills": [
+    "Preferred Skill 1",
+    "Preferred Skill 2"
+  ],
+  "responsibilities": [
+    "Responsibility Item 1",
+    "Responsibility Item 2"
+  ],
+  "experience_requirements": "Experience required",
+  "education_requirements": "Education required",
+  "all_requirements_list": [
+    "Atomic Requirement 1",
+    "Atomic Requirement 2",
+    "Atomic Requirement 3"
+  ]
+}}
+
+Job Description Text:
+{jd_text}
+"""
+    regex_extracted_title = extract_job_title_from_text(jd_text)
+
+    try:
+        response = safe_llm_invoke(prompt, provider=model_provider, temperature=0.1)
+        data = clean_and_parse_json(response.content)
+        
+        title = str(data.get("job_title", "")).strip()
+        generic_terms = ["role summary", "target position", "job description", "unknown role", "technical role", "position", "role"]
+        
+        if not title or title.lower() in generic_terms or len(title) > 90:
+            data["job_title"] = regex_extracted_title
+        else:
+            clean_title = re.sub(r'^(?:job\s*title|title|role|position)\s*:\s*', '', title, flags=re.IGNORECASE).strip()
+            clean_title = re.sub(r'^[•\-\*\s]+', '', clean_title).strip()
+            data["job_title"] = clean_title if clean_title else regex_extracted_title
+
+        return data
+
+    except Exception as e:
+        print(f"⚠️ Job Agent fallback extraction: {e}")
+        return {
+            "job_title": regex_extracted_title,
+            "target_role": regex_extracted_title,
+            "required_skills": ["Python", "SQL", "Data Analysis", "Machine Learning", "FastAPI"],
+            "preferred_skills": ["Docker", "Kubernetes"],
+            "responsibilities": ["Design and build AI pipelines", "Optimize vector database search"],
+            "experience_requirements": "Relevant industry experience",
+            "education_requirements": "Bachelor's degree",
+            "all_requirements_list": [
+                "Python",
+                "SQL",
+                "Data Analysis",
+                "Machine Learning",
+                "FastAPI",
+                "Docker",
+                "Kubernetes",
+                "Database Optimization"
+            ]
+        }

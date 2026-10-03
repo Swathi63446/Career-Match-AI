@@ -4,106 +4,199 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - CareerMatch AI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; min-height: 100vh; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; }
+        .logo-title h1 { font-size: 1.75rem; color: #38bdf8; }
+        .logo-title h1 span { color: #60a5fa; }
+        .logo-title p { font-size: 0.875rem; color: #94a3b8; }
+        .logout-btn { color: #f87171; text-decoration: none; font-weight: 600; font-size: 0.9rem; padding: 0.5rem 1rem; border: 1px solid #f87171; border-radius: 6px; transition: all 0.2s; }
+        .logout-btn:hover { background: #f87171; color: #fff; }
+
+        .card { background: #1e293b; border-radius: 10px; padding: 1.75rem; border: 1px solid #334155; margin-bottom: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .card h2 { font-size: 1.25rem; color: #f8fafc; margin-bottom: 1.25rem; }
+
+        .form-group { margin-bottom: 1.25rem; }
+        label { display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem; color: #cbd5e1; }
+        input[type="file"], select { width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #cbd5e1; font-size: 0.9rem; outline: none; }
+        textarea { width: 100%; height: 160px; padding: 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #f8fafc; font-size: 0.9rem; font-family: inherit; resize: vertical; outline: none; }
+        textarea:focus, input[type="file"]:focus, select:focus { border-color: #38bdf8; }
+
+        .btn-submit { background: #2563eb; color: #fff; border: none; padding: 0.75rem 1.75rem; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-submit:hover { background: #1d4ed8; }
+        .btn-submit:disabled { background: #475569; cursor: not-allowed; }
+
+        .spinner { display: none; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #workflowPanel { display: none; background: #0f172a; border: 1px solid #0284c7; border-radius: 8px; padding: 1.25rem; margin-top: 1.5rem; }
+        #workflowPanel h3 { font-size: 1rem; color: #38bdf8; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 8px; }
+        #workflowPanel p { font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem; }
+        
+        .status-box { background: #1e293b; padding: 1rem; border-radius: 6px; border-left: 4px solid #38bdf8; font-size: 0.9rem; color: #cbd5e1; }
+
+        .history-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+        .history-table th, .history-table td { padding: 0.85rem 1rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+        .history-table th { background: #0f172a; color: #94a3b8; font-weight: 600; }
+        .history-table tr:hover { background: #0f172a; }
+
+        .badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .badge-strong { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+        .badge-partial { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+        .badge-weak { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+
+        .view-link { color: #38bdf8; text-decoration: none; font-weight: 600; }
+        .view-link:hover { text-decoration: underline; }
+    </style>
 </head>
 <body>
-    <header class="app-header">
-        <div class="container header-container">
+
+<div class="container">
+    <header>
+        <div class="logo-title">
             <h1>CareerMatch <span>AI</span></h1>
-            <p class="tagline">Multi-Agent Candidate & Job Alignment Platform</p>
+            <p>Multi-Agent Candidate & Job Alignment Platform</p>
         </div>
+        <a href="/logout" class="logout-btn">Log Out</a>
     </header>
 
-    <main class="container main-content">
-        <!-- Input & Upload Section -->
-        <section class="card input-card">
-            <h2>New Match Analysis</h2>
-            <form id="analyzeForm" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="resume">Candidate Resume (PDF or DOCX):</label>
-                    <input type="file" id="resume" name="resume" accept=".pdf,.docx" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="job_description">Job Description:</label>
-                    <textarea id="job_description" name="job_description" rows="6" placeholder="Paste full job description requirements here..." required></textarea>
-                </div>
-
-                <button type="submit" id="submitBtn" class="btn btn-primary">
-                    <span>Analyze Match</span>
-                </button>
-            </form>
-        </section>
-
-        <!-- Progress Overlay / Indicator -->
-        <section id="progressSection" class="card progress-card hidden">
-            <h3>Agent Workflow Processing</h3>
-            <p class="progress-desc">Multi-agent intelligence system evaluating alignment...</p>
-            
-            <div class="step-list">
-                <div class="step-item" id="step-resume">
-                    <span class="step-icon">⏳</span>
-                    <span class="step-text">Resume Agent: Parsing resume fields</span>
-                </div>
-                <div class="step-item" id="step-job">
-                    <span class="step-icon">⏳</span>
-                    <span class="step-text">Job Agent: Extracting target criteria</span>
-                </div>
-                <div class="step-item" id="step-matching">
-                    <span class="step-icon">⏳</span>
-                    <span class="step-text">Matching Agent: Performing ChromaDB RAG evaluation</span>
-                </div>
-                <div class="step-item" id="step-gap">
-                    <span class="step-icon">⏳</span>
-                    <span class="step-text">Gap Agent: Categorizing skill priority risks</span>
-                </div>
-                <div class="step-item" id="step-final">
-                    <span class="step-icon">⏳</span>
-                    <span class="step-text">Manager Agent: Synthesizing executive report</span>
-                </div>
+    <div class="card">
+        <h2>New Match Analysis</h2>
+        <form id="analyzeForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="model_provider">Select AI Engine / LLM Model:</label>
+                <select id="model_provider" name="model_provider">
+                    <option value="gemini" selected>Google Gemini 2.5 Flash (Default)</option>
+                    <option value="groq">Groq (openai/gpt-oss-20b / LLaMA-3.3)</option>
+                    <option value="huggingface">Hugging Face (Qwen/Qwen3-8B)</option>
+                </select>
             </div>
-        </section>
 
-        <!-- Past Analyses History Table -->
-        <section class="card history-card">
-            <h2>Recent Analyses History</h2>
-            {% if analyses %}
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Candidate Name</th>
-                                <th>Target Role</th>
-                                <th>Overall Fit</th>
-                                <th>Created Date</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in analyses %}
-                            <tr>
-                                <td><strong>{{ item.candidate_name }}</strong></td>
-                                <td>{{ item.job_title }}</td>
-                                <td>
-                                    <span class="badge badge-{{ item.match_summary and ('strong' if 'Strong' in item.match_summary else ('partial' if 'Partial' in item.match_summary else 'weak')) }}">
-                                        {{ item.fit_category if item.fit_category else 'Analyzed' }}
-                                    </span>
-                                </td>
-                                <td>{{ item.created_at[:10] }}</td>
-                                <td>
-                                    <a href="/analysis/{{ item.analysis_id }}" class="btn btn-secondary btn-sm">View Report</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <p class="empty-state">No past candidate match analyses found. Run a new analysis above!</p>
-            {% endif %}
-        </section>
-    </main>
+            <div class="form-group">
+                <label for="resume">Candidate Resume (PDF, DOCX, or TXT):</label>
+                <input type="file" id="resume" name="resume" accept=".pdf,.docx,.txt" required>
+            </div>
 
-    <script src="{{ url_for('static', filename='main.js') }}"></script>
+            <div class="form-group">
+                <label for="job_description">Job Description:</label>
+                <textarea id="job_description" name="job_description" placeholder="Paste the complete job description here..." required></textarea>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn-submit">
+                <span class="spinner" id="btnSpinner"></span>
+                <span id="btnText">Run Analysis</span>
+            </button>
+        </form>
+
+        <div id="workflowPanel">
+            <h3><span class="spinner" style="display:inline-block; border-top-color:#38bdf8;"></span> Multi-Agent Pipeline Executing</h3>
+            <p>Your analysis is running on the backend server using your chosen AI model. You can safely switch tabs.</p>
+            <div class="status-box">
+                ⚡ Autonomous agents are extracting resume structures, querying ChromaDB vector store, and running itemized alignment...
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Recent Application Analyses</h2>
+        {% if past_analyses %}
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Candidate Name</th>
+                        <th>Job Title</th>
+                        <th>AI Model Used</th>
+                        <th>Match Result</th>
+                        <th>Analyzed Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in past_analyses %}
+                        <tr>
+                            <td><strong>{{ item.candidate_name or 'Candidate Profile' }}</strong></td>
+                            <td>{{ item.job_title or 'Target Position' }}</td>
+                            <td><small style="color: #38bdf8;">{{ item.selected_model or 'Google Gemini 2.5 Flash' }}</small></td>
+                            <td>
+                                {% set fit = item.fit_category or 'Evaluated' %}
+                                {% if 'Strong' in fit %}
+                                    <span class="badge badge-strong">{{ fit }}</span>
+                                {% elif 'Partial' in fit %}
+                                    <span class="badge badge-partial">{{ fit }}</span>
+                                {% else %}
+                                    <span class="badge badge-weak">{{ fit }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.created_at[:10] if item.created_at else 'N/A' }}</td>
+                            <td><a href="/report/{{ item.analysis_id }}" class="view-link">View Report &rarr;</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color: #94a3b8; font-size: 0.9rem;">No previous analysis reports found in Firestore. Upload a resume above to create your first report.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const fileInput = document.getElementById('resume');
+    const jobInput = document.getElementById('job_description');
+    const modelSelect = document.getElementById('model_provider');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnSpinner = document.getElementById('btnSpinner');
+    const btnText = document.getElementById('btnText');
+    const workflowPanel = document.getElementById('workflowPanel');
+
+    if (!fileInput.files[0] || !jobInput.value.trim()) {
+        alert('Please select a resume file and paste a job description.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('resume', fileInput.files[0]);
+    formData.append('job_description', jobInput.value.trim());
+    formData.append('model_provider', modelSelect.value);
+
+    submitBtn.disabled = true;
+    btnSpinner.style.display = 'inline-block';
+    btnText.innerText = 'Analyzing in Background...';
+    workflowPanel.style.display = 'block';
+
+    try {
+        const response = await fetch('/analyze', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            btnText.innerText = 'Redirecting to Report...';
+            window.location.href = `/report/${data.analysis_id}`;
+        } else {
+            alert(data.error || 'Analysis failed. Please check server logs.');
+            resetUI();
+        }
+    } catch (err) {
+        alert('Network request error: ' + err.message);
+        resetUI();
+    }
+
+    function resetUI() {
+        submitBtn.disabled = false;
+        btnSpinner.style.display = 'none';
+        btnText.innerText = 'Run Analysis';
+        workflowPanel.style.display = 'none';
+    }
+});
+</script>
+
 </body>
 </html>

@@ -56,7 +56,7 @@ class JobData(BaseModel):
 
 
 # ==========================================
-# 3. MATCHING AGENT SCHEMAS (Agent 4)
+# 3. MATCHING & GAP ITEM SCHEMAS
 # ==========================================
 
 class MatchItem(BaseModel):
@@ -74,14 +74,6 @@ class MatchItem(BaseModel):
     )
 
 
-class MatchingAnalysis(BaseModel):
-    matches: List[MatchItem] = Field(default_factory=list, description="List of requirement evaluations")
-
-
-# ==========================================
-# 4. GAP ANALYSIS AGENT SCHEMAS (Agent 5)
-# ==========================================
-
 class GapItem(BaseModel):
     skill: str = Field(description="Name of the missing or partially matched skill/requirement")
     priority: Literal["High Priority", "Medium Priority", "Low Priority"] = Field(
@@ -92,19 +84,27 @@ class GapItem(BaseModel):
     recommendation: str = Field(description="Actionable step the candidate can take to bridge this gap")
 
 
-class GapAnalysis(BaseModel):
-    skill_gaps: List[GapItem] = Field(default_factory=list)
-    overall_recommendations: List[str] = Field(default_factory=list, description="High-level practical advice steps")
-
-
 # ==========================================
-# 5. MANAGER / FINAL REPORT SCHEMA (Agent 1)
+# 4. CONSOLIDATED REASONING REPORT SCHEMA
 # ==========================================
 
-class FinalReport(BaseModel):
+class UnifiedAnalysisReport(BaseModel):
     candidate_name: str = Field(default="Candidate", description="Full name of candidate")
     target_role: str = Field(default="Target Role", description="Role being analyzed for")
-    overall_fit_summary: str = Field(description="Concise 3-4 sentence narrative summarizing overall candidate alignment")
-    fit_category: Literal["Strong Match", "Partial Match", "Weak Match"] = Field(description="Overall fit classification")
+    overall_score: int = Field(default=0, description="Overall candidate match percentage score from 0 to 100")
+    fit_category: Literal["Strong Match", "Partial Match", "Weak Match"] = Field(
+        description="Overall fit classification"
+    )
+    overall_fit_summary: str = Field(
+        description="Concise 3-4 sentence narrative summarizing overall candidate alignment"
+    )
     strengths: List[str] = Field(default_factory=list, description="Top 2-4 candidate strengths")
     top_gaps: List[str] = Field(default_factory=list, description="Top primary gaps or risk factors")
+    matches: List[MatchItem] = Field(default_factory=list, description="Detailed item-by-item requirement evaluation")
+    skill_gaps: List[GapItem] = Field(default_factory=list, description="Detailed skill gaps identified")
+    overall_recommendations: List[str] = Field(
+        default_factory=list, description="High-level practical advice steps for candidate"
+    )
+
+# Alias for backwards compatibility with existing imports
+FinalReport = UnifiedAnalysisReport

@@ -1,33 +1,29 @@
-# Use an official lightweight Python base image
-FROM python:3.12-slim
+FROM python:3.11-slim
 
-# Prevent Python from writing bytecode files and ensure log outputs are sent to terminal in real time
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Set the working directory inside the container
 WORKDIR /app
 
-# Install essential system dependencies for building C-extensions (needed by packages like ChromaDB)
+# Prevent Python from writing .pyc files and buffer outputs
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install minimal build tools required for C-extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt-get/lists/*
 
-# Install the uv package manager
-RUN pip install --no-cache-dir uv
+# Copy dependency configuration files
+COPY pyproject.toml uv.lock ./
 
-# Copy dependency files first to utilize Docker layer caching
-COPY pyproject.toml uv.lock* ./
+# Install uv package manager and sync dependencies without PyTorch
+RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
 
-# Install project dependencies using uv
-RUN uv sync --no-cache
-
-# Copy the rest of the application codebase
+# Copy application source code
 COPY . .
 
-# Expose the default Flask port
+# Ensure vector store pre-indexing step runs during image build
+RUN uv run python ingest.py
+
 EXPOSE 5000
 
-# Execute the Flask application using uv
-CMD ["uv", "run", "python", "app.py"]
+# Run single Gunicorn worker to lock memory footprint well below Render's 512MB limit
+CMD ["uv", "run", "gunicorn", "--workers", "1", "--threads", "2", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]

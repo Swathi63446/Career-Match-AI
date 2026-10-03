@@ -3,101 +3,387 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analysis Report - {{ data.candidate_name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Candidate Analysis Report | {{ report.candidate_name }}</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151c2c;
+            --border-color: #232d42;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-light-blue: #60a5fa;
+            --status-green: #10b981;
+            --status-yellow: #f59e0b;
+            --status-red: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 30px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header Bar */
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+
+        .header-title h1 {
+            font-size: 1.8rem;
+            color: var(--accent-light-blue);
+            font-weight: 700;
+        }
+
+        .header-title p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-top: 4px;
+        }
+
+        .header-badges {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .ai-model-badge {
+            background-color: #1e293b;
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-light-blue);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .fit-score-badge {
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .fit-strong { background-color: rgba(16, 185, 129, 0.2); color: var(--status-green); border: 1px solid var(--status-green); }
+        .fit-partial { background-color: rgba(245, 158, 11, 0.2); color: var(--status-yellow); border: 1px solid var(--status-yellow); }
+        .fit-weak { background-color: rgba(239, 68, 68, 0.2); color: var(--status-red); border: 1px solid var(--status-red); }
+
+        /* General Section Cards */
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        /* 2-Column Grid for Strengths & Gaps */
+        .two-column-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .list-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+        }
+
+        .bullet-icon-green { color: var(--status-green); font-weight: bold; }
+        .bullet-icon-red { color: var(--status-red); font-weight: bold; }
+
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #1e293b;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+            vertical-align: top;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .status-strong { background: rgba(16, 185, 129, 0.15); color: var(--status-green); }
+        .status-partial { background: rgba(245, 158, 11, 0.15); color: var(--status-yellow); }
+        .status-missing { background: rgba(239, 68, 68, 0.15); color: var(--status-red); }
+        .status-weak { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
+
+        .priority-high { color: var(--status-red); font-weight: 600; }
+        .priority-medium { color: var(--status-yellow); font-weight: 600; }
+        .priority-low { color: var(--accent-light-blue); font-weight: 600; }
+
+        .rag-context-tag {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 4px 8px;
+            background-color: #1e293b;
+            border-radius: 4px;
+            color: var(--accent-light-blue);
+            font-size: 0.8rem;
+            font-family: monospace;
+        }
+
+        .btn-return {
+            display: inline-block;
+            background-color: var(--accent-blue);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+
+        .btn-return:hover {
+            background-color: #2563eb;
+        }
+    </style>
 </head>
 <body>
-    <header class="app-header">
-        <div class="container header-container">
-            <h1>CareerMatch <span>AI</span></h1>
-            <a href="/dashboard" class="btn btn-outline">&larr; Back to Dashboard</a>
+
+<div class="container">
+
+    <!-- Header Section with AI Engine Badge -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>Candidate: {{ report.candidate_name }}</h1>
+            <p>Target Position: {{ report.job_title }}</p>
         </div>
-    </header>
+        <div class="header-badges">
+            <span class="ai-model-badge">
+                🤖 AI Engine: 
+                {% if report.selected_model %}
+                    {{ report.selected_model }}
+                {% elif report.model_provider %}
+                    {{ report.model_provider }}
+                {% else %}
+                    Google Gemini 3.5 Flash
+                {% endif %}
+            </span>
 
-    <main class="container main-content">
-        <!-- Summary Header Card -->
-        <section class="card report-header-card">
-            <div class="candidate-meta">
-                <div>
-                    <h2>{{ data.candidate_name }}</h2>
-                    <p class="role-title">Target Role: <span>{{ data.job_title }}</span></p>
-                </div>
-                <div>
-                    <a href="{{ data.resume_url }}" target="_blank" class="btn btn-secondary">Download Resume File</a>
-                </div>
-            </div>
-            
-            <hr class="divider">
-
-            <div class="summary-box">
-                <h3>Executive Summary</h3>
-                <p>{{ data.match_summary }}</p>
-            </div>
-        </section>
-
-        <!-- Skills Analysis Table -->
-        <section class="card">
-            <h3>Detailed Requirement Match Analysis</h3>
-            <div class="table-wrapper">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Requirement</th>
-                            <th>Category</th>
-                            <th>Status</th>
-                            <th>Evidence from Resume</th>
-                            <th>ChromaDB RAG Context</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for match in data.matches %}
-                        <tr>
-                            <td><strong>{{ match.requirement }}</strong></td>
-                            <td>{{ match.category }}</td>
-                            <td>
-                                <span class="badge badge-{{ 'strong' if match.status == 'Strong Match' else ('partial' if match.status == 'Partial Match' else ('weak' if match.status == 'Weak Evidence' else 'missing')) }}">
-                                    {{ match.status }}
-                                </span>
-                            </td>
-                            <td>{{ match.evidence_from_resume }}</td>
-                            <td class="rag-text">{{ match.rag_context_used if match.rag_context_used else 'N/A' }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Skill Gaps Section -->
-        <section class="card">
-            <h3>Identified Skill Gaps & Prioritization</h3>
-            {% if data.skill_gaps %}
-                <div class="gap-grid">
-                    {% for gap in data.skill_gaps %}
-                    <div class="gap-card priority-{{ gap.priority | lower | replace(' ', '-') }}">
-                        <div class="gap-header">
-                            <h4>{{ gap.skill }}</h4>
-                            <span class="badge badge-priority">{{ gap.priority }}</span>
-                        </div>
-                        <p><strong>Reason:</strong> {{ gap.reason }}</p>
-                        <p class="recommendation-text"><strong>Action:</strong> {{ gap.recommendation }}</p>
-                    </div>
-                    {% endfor %}
-                </div>
+            {% if report.overall_score >= 80 %}
+                <span class="fit-score-badge fit-strong">
+            {% elif report.overall_score >= 50 %}
+                <span class="fit-score-badge fit-partial">
             {% else %}
-                <p class="empty-state">No significant skill gaps identified for this candidate!</p>
+                <span class="fit-score-badge fit-weak">
             {% endif %}
-        </section>
+                {{ report.fit_category }} ({{ report.overall_score }}%)
+            </span>
+        </div>
+    </div>
 
-        <!-- Strategic Recommendations -->
-        <section class="card">
-            <h3>Strategic Recommendations</h3>
-            <ul class="recommendation-list">
-                {% for rec in data.recommendations %}
-                    <li>{{ rec }}</li>
+    <!-- Executive Alignment Summary -->
+    <div class="card">
+        <div class="card-title">Executive Alignment Summary</div>
+        <p style="color: #cbd5e1; font-size: 0.95rem;">
+            {{ report.match_summary or "Evaluation completed for the target role." }}
+        </p>
+    </div>
+
+    <!-- 2-Column Strengths & Primary Risks -->
+    <div class="two-column-grid">
+        <div class="card" style="margin-bottom: 0;">
+            <div class="card-title" style="color: var(--status-green);">Key Candidate Strengths</div>
+            {% if report.strengths %}
+                {% for strength in report.strengths %}
+                <div class="list-item">
+                    <span class="bullet-icon-green">✓</span>
+                    <span>{{ strength }}</span>
+                </div>
                 {% endfor %}
-            </ul>
-        </section>
-    </main>
+            {% else %}
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">No specific strengths highlighted.</p>
+            {% endif %}
+        </div>
+
+        <div class="card" style="margin-bottom: 0;">
+            <div class="card-title" style="color: var(--status-red);">Primary Gaps & Risks</div>
+            {% if report.top_gaps %}
+                {% for gap in report.top_gaps %}
+                <div class="list-item">
+                    <span class="bullet-icon-red">✕</span>
+                    <span>{{ gap }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">No major gaps identified.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Detailed Requirement Evaluations & Resume Evidence Table -->
+    <div class="card">
+        <div class="card-title">Detailed Requirement Evaluations & Resume Evidence</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Requirement</th>
+                    <th style="width: 15%;">Status</th>
+                    <th style="width: 60%;">Resume Evidence & RAG Context</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if report.matches %}
+                    {% for match in report.matches %}
+                    <tr>
+                        <td>
+                            <strong>{{ match.requirement }}</strong><br>
+                            <small style="color: var(--text-secondary);">{{ match.category }}</small>
+                        </td>
+                        <td>
+                            {% if match.status == 'Strong Match' %}
+                                <span class="status-pill status-strong">{{ match.status }}</span>
+                            {% elif match.status == 'Partial Match' %}
+                                <span class="status-pill status-partial">{{ match.status }}</span>
+                            {% elif match.status == 'Missing' %}
+                                <span class="status-pill status-missing">{{ match.status }}</span>
+                            {% else %}
+                                <span class="status-pill status-weak">{{ match.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div>{{ match.evidence_from_resume or 'No direct evidence provided in resume text.' }}</div>
+                            {% if match.rag_context_used and match.rag_context_used != 'None' %}
+                            <div class="rag-context-tag">Context: {{ match.rag_context_used }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-secondary);">No itemized matches processed.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Strategic Skill Gap Analysis Table -->
+    <div class="card">
+        <div class="card-title">Strategic Skill Gap Analysis (Grouped by Priority)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">Requirement / Skill</th>
+                    <th style="width: 15%;">Priority</th>
+                    <th style="width: 30%;">Gap Reason</th>
+                    <th style="width: 30%;">Targeted Recommendation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if report.skill_gaps %}
+                    {% for gap in report.skill_gaps %}
+                    <tr>
+                        <td><strong>{{ gap.skill }}</strong></td>
+                        <td>
+                            {% if gap.priority == 'High Priority' %}
+                                <span class="priority-high">{{ gap.priority }}</span>
+                            {% elif gap.priority == 'Medium Priority' %}
+                                <span class="priority-medium">{{ gap.priority }}</span>
+                            {% else %}
+                                <span class="priority-low">{{ gap.priority }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="color: #cbd5e1;">{{ gap.reason }}</td>
+                        <td style="color: #cbd5e1;">{{ gap.recommendation }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--status-green);">No major skill gaps detected. Candidate satisfies extracted role criteria.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Overall Strategic Recommendations -->
+    <div class="card">
+        <div class="card-title">Overall Strategic Recommendations</div>
+        {% if report.overall_recommendations %}
+            {% for rec in report.overall_recommendations %}
+            <div class="list-item">
+                <span style="color: var(--accent-light-blue); font-weight: bold;">→</span>
+                <span>{{ rec }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">No specific recommendations required.</p>
+        {% endif %}
+    </div>
+
+    <!-- Navigation Footer -->
+    <div style="margin-top: 30px; margin-bottom: 40px;">
+        <a href="{{ url_for('dashboard') }}" class="btn-return">← Return to Admin Dashboard</a>
+    </div>
+
+</div>
+
 </body>
 </html>

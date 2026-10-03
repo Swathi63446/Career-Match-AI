@@ -1,93 +1,120 @@
 import os
-import uuid
-from datetime import datetime, timezone
+import json
+import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-from dotenv import load_dotenv
 
-load_dotenv()
-
-CREDENTIAL_FILE = "serviceAccountKey.json"
-
-if not os.path.exists(CREDENTIAL_FILE) and os.path.exists("serviceAccountKey.json.json"):
-    CREDENTIAL_FILE = "serviceAccountKey.json.json"
-
-# Initialize Firebase if credential file exists
-if not firebase_admin._apps:
-    if os.path.exists(CREDENTIAL_FILE):
-        cred = credentials.Certificate(CREDENTIAL_FILE)
-        project_id = cred.project_id
-        bucket_name = os.getenv("FIREBASE_STORAGE_BUCKET", f"{project_id}.appspot.com")
-        
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': bucket_name
-        })
-    else:
-        print(f"[Firebase Notice] Credential file '{CREDENTIAL_FILE}' not found. Running in CI/offline mode.")
-
-# Safely attach Firestore database client
-try:
-    db = firestore.client() if firebase_admin._apps else None
-except Exception:
-    db = None
+LOCAL_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+LOCAL_JSON_PATH = os.path.join(LOCAL_DATA_DIR, 'analyses.json')
+os.makedirs(LOCAL_DATA_DIR, exist_ok=True)
 
 
-def upload_resume_file(file_bytes: bytes, original_filename: str) -> str:
+def load_local_store() -> dict:
+    if os.path.exists(LOCAL_JSON_PATH):
+        try:
+            with open(LOCAL_JSON_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_local_store(data: dict):
+    try:
+        with open(LOCAL_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Local storage write error: {e}")
+
+
+def initialize_firebase():
     if not firebase_admin._apps:
-        print("[Firebase Warning] Storage credentials missing. File upload bypassed.")
-        return "#storage-bypassed"
-        
+        cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-key.json")
+        bucket_name = os.getenv("FIREBASE_STORAGE_BUCKET", "career-match-ai-7c9c4.firebasestorage.app")
+        project_id = os.getenv("FIREBASE_PROJECT_ID", "career-match-ai-7c9c4")
+
+        os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+        options = {'storageBucket': bucket_name, 'projectId': project_id}
+
+        if os.path.exists(cred_path):
+            try:
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred, options)
+                print(f"✅ [Firebase Initialized] Loaded credentials from '{cred_path}'")
+            except Exception as e:
+                print(f"ℹ️ [Firebase Notice] App init note: {e}")
+        else:
+            firebase_admin.initialize_app(options=options)
+
+
+initialize_firebase()
+
+
+def save_analysis_to_firestore(analysis_id: str, payload: dict) -> bool:
+    if "created_at" not in payload:
+        payload["created_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    # Save to local disk store first (Guarantees immediate report availability)
+    local_data = load_local_store()
+    local_data[analysis_id] = payload
+    save_local_store(local_data)
+    print(f"✅ [Local Store] Analysis '{analysis_id}' saved to disk.")
+
+    # Attempt Cloud Firestore sync
+    try:
+        db = firestore.client()
+        doc_ref = db.collection('analyses').document(analysis_id)
+        doc_ref.set(payload)
+        print(f"✅ [Firestore Success] Synced '{analysis_id}' to Cloud Firestore.")
+        return True
+    except Exception:
+        print(f"ℹ️ [Storage Note] Saved locally in persistent disk store.")
+        return False
+
+
+def upload_resume_to_storage(file_path: str, filename: str) -> str:
     try:
         bucket = storage.bucket()
-        file_extension = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else 'pdf'
-        unique_path = f"resumes/{uuid.uuid4().hex}.{file_extension}"
-        
-        blob = bucket.blob(unique_path)
-        blob.upload_from_string(file_bytes, content_type="application/octet-stream")
-        
-        try:
-            blob.make_public()
-            return blob.public_url
-        except Exception:
-            return blob.generate_signed_url(expiration=3600 * 24 * 7)
-    except Exception as e:
-        print(f"[Firebase Warning] Storage upload bypassed: {str(e)}")
-        return "#storage-bypassed"
+        blob = bucket.blob(f"resumes/{filename}")
+        blob.upload_from_filename(file_path)
+        blob.make_public()
+        return blob.public_url
+    except Exception:
+        return f"/uploads/{filename}"
 
 
-def save_analysis_result(analysis_id: str, state_data: dict, resume_url: str) -> dict:
-    record = {
-        "analysis_id": analysis_id,
-        "candidate_name": state_data.get("resume_data", {}).get("personal_info", {}).get("name", "Unknown Candidate"),
-        "job_title": state_data.get("job_data", {}).get("target_role", "Job Role"),
-        "resume_url": resume_url,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "match_summary": state_data.get("final_report", {}).get("overall_fit_summary", ""),
-        "fit_category": state_data.get("final_report", {}).get("fit_category", "Analyzed"),
-        "matches": state_data.get("matches", []),
-        "skill_gaps": state_data.get("skill_gaps", []),
-        "recommendations": state_data.get("recommendations", []),
-        "resume_data": state_data.get("resume_data", {}),
-        "job_data": state_data.get("job_data", {})
-    }
-    
-    if db:
-        db.collection('analyses').document(analysis_id).set(record)
-    else:
-        print("[Firebase Notice] Database save skipped (running in CI/offline mode).")
-        
-    return record
+def get_analysis_from_firestore(analysis_id: str) -> dict:
+    # 1. Check local persistent store first
+    local_data = load_local_store()
+    if analysis_id in local_data:
+        return local_data[analysis_id]
+
+    # 2. Check Firestore
+    try:
+        db = firestore.client()
+        doc = db.collection('analyses').document(analysis_id).get()
+        if doc.exists:
+            return doc.to_dict()
+    except Exception:
+        pass
+
+    return None
 
 
-def fetch_all_analyses() -> list:
-    if not db:
-        return []
-    docs = db.collection('analyses').order_by('created_at', direction=firestore.Query.DESCENDING).stream()
-    return [doc.to_dict() for doc in docs]
+def get_all_analyses_from_firestore() -> list:
+    local_data = load_local_store()
+    analyses_map = {item["analysis_id"]: item for item in local_data.values() if isinstance(item, dict) and "analysis_id" in item}
 
+    try:
+        db = firestore.client()
+        docs = db.collection('analyses').order_by('created_at', direction=firestore.Query.DESCENDING).stream()
+        for doc in docs:
+            d = doc.to_dict()
+            if "analysis_id" in d:
+                analyses_map[d["analysis_id"]] = d
+    except Exception:
+        pass
 
-def fetch_single_analysis(analysis_id: str) -> dict:
-    if not db:
-        return None
-    doc = db.collection('analyses').document(analysis_id).get()
-    return doc.to_dict() if doc.exists else None
+    results = list(analyses_map.values())
+    results.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    return results
